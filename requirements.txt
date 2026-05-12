@@ -1,0 +1,7 @@
+gwosc>=0.7.1
+numpy>=1.21
+scipy>=1.7
+matplotlib>=3.4
+requests>=2.26
+h5py>=3.4
+gcn-kafka>=0.3

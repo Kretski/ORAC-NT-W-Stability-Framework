@@ -1,174 +1,229 @@
-# 🌍 ORAC-NT v10 — Global Gravitational Wave Triangulation Engine
+# ORAC-NT — Real-Time Gravitational Wave Detection Pipeline
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19553825.svg)](https://doi.org/10.5281/zenodo.19553825)
+**Hardware-Tested Low-Latency GW Trigger Architecture**
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20129975.svg)](https://doi.org/10.5281/zenodo.20129975)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![ESSOAr](https://img.shields.io/badge/Preprint-ESSOAr-green.svg)](https://essopenarchive.org)
 
-A physically validated gravitational wave matched filter pipeline with
-3-detector sky localization and live NASA GCN alert integration,
-built on real LIGO/GWOSC public data.
+An independent, publicly verifiable gravitational wave detection pipeline operating
+in real-time via NASA GCN Kafka. Benchmarked through seven validation phases on
+real LIGO O3/O4 data.
 
 **Live demo:** https://orac-nt-core.onrender.com
 
-![ORAC-NT v10 Sky Localization](ORAC-NT%20v9_2.png)
+---
+
+## Key Results
+
+| Metric | Value |
+|---|---|
+| Detection Rate (Phase A) | 5/5 (100%) canonical events |
+| Event Generalization (Phase B) | 10/10 (100%) BNS/BBH/NSBH |
+| ROC AUC (Phase E4) | **0.983** |
+| Sensitivity 50% efficiency | SNR ≈ 8 (LVK standard) |
+| Sensitivity 100% efficiency | SNR ≥ 10 |
+| False Alarm Rate | 0.00e+00 /yr (7.96h O3 quiet data) |
+| H1+L1+V1 Coincidence (Phase E6) | **6/6 (100%)** |
+| IFAR | **> 1,000,000 yr** at all thresholds |
+| O4 Detection (Phase E7) | 2/2 (GW200105, GW200115) |
+| Hardware Latency | **535 ns** (STM32F401) |
+| Software Latency | 130 ms (CPU) |
+| Live GCN Events Archived | 30+ Mock Data Challenge events |
 
 ---
 
-## What's new in v10
+## Benchmark Summary (Phases A–E7)
 
-| Version | Change |
-|---------|--------|
-| v9 | Validated pipeline: 2PN matched filter, 3-ring sky localization |
-| **v10** | **Dual-tab UI: Historical (GWOSC) + Live GCN Alert mode** |
-
-**Tab 1 — Historical:** select any of 4 LIGO events, run full triangulation on archived data.
-
-**Tab 2 — Live GCN Alert:** connects to NASA GCN Kafka stream via `orac_live.py`. When a real alert arrives, auto-selects the template (BBH or BNS), fetches live strain data, and displays the sky localization in real time.
+| Phase | Test | Result |
+|---|---|---|
+| A | 5/5 canonical GW events | 100% detection, FAR=0 |
+| B | 10/10 event generalization + injections | 100% generalization, 65-80% injection recovery |
+| C | H1+L1 coincidence + glitch rejection | 6/8 coincidence, AUC=0.638, 130ms CPU |
+| D | Long-duration FAR + ablation + PSD robustness | FAR=0, pipeline stable |
+| E1 | Self-calibrated matched filter (GW170817) | Peak SNR=11.73, threshold=8 |
+| E2 | Time-slide background estimation | 5σ threshold = SNR 5.93 |
+| E3 | Sensitivity curve | 50% @ SNR≈8, 100% @ SNR≥10 |
+| E4 | ROC curve | **AUC = 0.983** |
+| E5 | Chi² signal/glitch discriminator | Complete separation, zero overlap |
+| E6 | H1+L1+V1 multi-detector coincidence | **6/6, IFAR > 1,000,000 yr** |
+| E7 | Real O4 noise + event detection | FAR=0, 2/2 detected |
 
 ---
 
-## Pipeline
+## Pipeline Architecture
 
 ```
-GWOSC / Live GCN data (H1 + L1 + V1)
+NASA GCN Kafka (8 topics: IGWN, IceCube, Swift, Fermi, Einstein Probe...)
         ↓
-Bandpass [20–f_ISCO Hz] + Whitening (PSD, nperseg=4×FS)
+orac_live.py — real-time alert listener
         ↓
-2PN SPA Einstein chirp template
+orac_spinqit_wrapper.py — event archiver + pipeline trigger
         ↓
-Zero-padded linear FFT matched filter (MAD-normalized SNR)
+ORACS_spv18.py — core detection pipeline:
+  Bandpass [20–500 Hz] + Whitening (PSD calibrated)
         ↓
-Causal peak search (±light-travel time per detector pair)
+  Multi-template MF bank (BBH_O1, BBH_gen, BBH_lite, BNS, NSBH)
         ↓
-3 sky rings via Rodrigues rotation (ECEF coordinates)
+  Kurtosis veto + Chi² consistency test (4 frequency bands)
         ↓
-Ring intersection finder → 2D candidate (RA, Dec)
+  H1+L1+V1 coincidence window (Δt ≤ 10ms H1-L1, ≤ 27ms H1-V1)
+        ↓
+  TRIGGER → history/ archive (JSON + log + PNG)
 ```
-
----
-
-## Validated results
-
-| Event | Our Δt(H1-L1) | LIGO published | Status |
-|-------|--------------|----------------|--------|
-| GW150914 | −4.15 ms | −6.9 ms | ✓ correct sign & order of magnitude |
-| GW170814 | 3-ring intersection | ~RA 50°, Dec −45° | ✓ correct quadrant |
-| GW170817 | NS template dominates BH | ✓ | ✓ |
-
-> Single-template SNR < 8σ is expected. Full LIGO pipelines use ~250,000 templates.
-> Timing and sky geometry are physically validated.
 
 ---
 
 ## Installation
 
 ```bash
-pip install streamlit gwpy scipy numpy matplotlib
-streamlit run orac_nt_v10.py
+pip install -r requirements.txt
 ```
 
-Data is downloaded automatically from GWOSC on first run and cached locally.
-
----
-
-## Supported events (Historical tab)
-
-| Event | Detectors | Type |
-|-------|-----------|------|
-| GW150914 | H1 + L1 | First BBH merger (~35+30 M☉) |
-| GW170104 | H1 + L1 | BBH ~20 M☉ |
-| GW170814 | H1 + L1 + V1 | First 3-detector BBH merger |
-| GW170817 | H1 + L1 + V1 | Binary NS merger (kilonova) |
-
----
-
-## Key physics
-
-### 2PN SPA Template
+**Required:**
 ```
-ψ(f) = (3/128η) · v⁻⁵ · [1 + (20/9)(743/336 + 11η/4)·v²
-                           − 16π·v³
-                           + 10·(3058673/1016064 + 5429η/1008 + 617η²/144)·v⁴]
+gwosc>=0.7.1
+numpy>=1.21
+scipy>=1.7
+matplotlib>=3.4
+requests>=2.26
+h5py>=3.4
+gcn-kafka>=0.3
 ```
-where `v = (πGMf/c³)^(1/3)`. Ref: Blanchet et al. 1995; Cutler & Flanagan 1994.
 
-### Sky ring geometry
-Each detector pair defines a constant time-delay cone:
-`cos θ = c·Δt / |baseline|`
-Rotated via Rodrigues rotation around the true ECEF baseline vector.
-Three rings (H1-L1, H1-V1, L1-V1) intersect at the source.
-
-### MAD normalization
-`σ_MAD = 1.4826 · median(|x − median(x)|)`
-Robust to signal self-suppression — unlike std or rolling-std.
-
----
-
-## Optional: Live GW Alert Listener
-
-`orac_live.py` connects to the NASA GCN Kafka stream and listens for
-real gravitational wave alerts. When a new event arrives, it saves
-GPS time and classification to `latest_event.json`, which Tab 2
-picks up automatically.
-
-```powershell
-# Windows PowerShell — Terminal 1
+**Setup GCN credentials** (register free at https://gcn.nasa.gov/):
+```bash
+# Windows PowerShell
 $env:GCN_CLIENT_ID="your_client_id"
 $env:GCN_CLIENT_SECRET="your_client_secret"
-python orac_live.py
 
-# Terminal 2
-streamlit run orac_nt_v10.py
-```
-
-```bash
-# Linux / macOS — Terminal 1
+# Linux/macOS
 export GCN_CLIENT_ID="your_client_id"
 export GCN_CLIENT_SECRET="your_client_secret"
-python orac_live.py
 ```
 
-Register for free at https://gcn.nasa.gov/ to get credentials.
-> Never commit credentials to Git. `.env` is in `.gitignore`.
+Never commit credentials to Git. Use `.env` (already in `.gitignore`).
 
 ---
 
-## Pipeline evolution
+## Usage
 
-| Version | Key fix |
-|---------|---------|
-| v5.1 | 2PN SPA template; ±10ms physical delay constraint |
-| v6 | Virgo (V1) third detector; 3-ring sky map |
-| v7 | Ring intersection finder |
-| v8 | Merger-window peak search; bandpass 20–f_ISCO; MAD SNR |
-| v8.3 | Zero-padded linear FFT (no circular wrap artifact) |
-| v8.5 | Template-peak aligned trimming (correct delay sign) |
-| v9 | Validated release — Δt(H1-L1) = −4.15 ms ✓ |
-| **v10** | **Dual-tab UI + Live GCN Alert integration** |
+**Live NASA GCN monitoring (two terminals):**
+```bash
+# Terminal 1 — GCN listener
+python orac_live.py
+
+# Terminal 2 — Pipeline + archiver
+python orac_spinqit_wrapper.py
+```
+
+**Run benchmarks:**
+```bash
+python orac_far_benchmark_v4.py   # Phase A: FAR + detection
+python orac_phase_b.py            # Phase B: injection + ROC
+python orac_phase_c.py            # Phase C: coincidence + glitch
+python orac_phase_d.py            # Phase D: long FAR + ablation
+python orac_phase_e1_templates.py # Phase E1: matched filter
+python orac_phase_e2_timeslides.py # Phase E2: time-slide background
+python orac_phase_e3_injections.py # Phase E3: sensitivity curve
+python orac_phase_e4_roc.py       # Phase E4: ROC AUC
+python orac_phase_e5_chisq.py     # Phase E5: chi² discriminator
+python orac_phase_e6.py           # Phase E6: multi-detector coincidence
+python orac_phase_e7.py           # Phase E7: real O4 noise test
+```
 
 ---
 
-## Boyajian's Star Application (W-Functional)
+## File Structure
 
-The same stability framework — **W(t) = η·α·D(r,t) − β(t)** — was applied
-to NASA Kepler photometric data for KIC 8462852 (Boyajian's Star), one of
-the most anomalous stellar light curves in the Kepler dataset.
+```
+├── ORACS_spv18.py              # Core detection pipeline (v34)
+├── orac_live.py                # NASA GCN Kafka listener
+├── orac_spinqit_wrapper.py     # Event archiver + pipeline trigger
+├── orac_archive.py             # Archive utilities
+├── orac_far_benchmark_v4.py    # Phase A benchmark
+├── orac_phase_b.py             # Phase B: injection campaign
+├── orac_phase_c.py             # Phase C: coincidence + glitch
+├── orac_phase_d.py             # Phase D: long FAR + ablation
+├── orac_phase_e1_templates.py  # Phase E1
+├── orac_phase_e2_timeslides.py # Phase E2
+├── orac_phase_e3_injections.py # Phase E3
+├── orac_phase_e4_roc.py        # Phase E4
+├── orac_phase_e5_chisq.py      # Phase E5
+├── orac_phase_e6.py            # Phase E6: multi-detector
+├── orac_phase_e7.py            # Phase E7: O4 noise
+├── ORAC_NT_PhaseE.pdf          # Phase E technical report
+├── ORAC_NT_ESRIC_Brief.pdf     # Technical brief (ESRIC Luxembourg)
+├── history/                    # Archived GCN events (JSON + logs)
+└── requirements.txt            # Python dependencies
+```
 
-The W-functional amplifies photometric deviations and provides a
-stability-based diagnostic complementary to standard flux-ratio analysis.
-KIC 8462852 exhibits extreme W excursions (W ≈ −0.41 during largest dip
-events), distinguishing it from typical Kepler targets.
+---
 
-**Preprint:** https://zenodo.org/records/19536321
+## Hardware Validation
 
-**To replicate:**
-1. Download Kepler Q1-Q17 long-cadence data for KIC 8462852 from MAST:
-   https://archive.stsci.edu/kepler/
-2. Apply the W-functional as described in the preprint
-3. Compare W(t) excursions against a control sample of stable Kepler stars
+Core algorithm validated on **STM32F401** at 84 MHz:
 
-The MAD normalization used in ORAC-NT v10 originates from the same
-robust statistics approach developed for the Boyajian's Star analysis.
+| Path | Latency |
+|---|---|
+| Standard trigger | **535 ns** |
+| Arrhenius thermal path | 654 ns |
+| Software (CPU, Python) | 130 ms |
+
+Repository: [ORAC-QNode](https://github.com/Kretski/ORAC-QNode)
+
+---
+
+## Live GCN Operation
+
+Connected to NASA GCN Kafka since 2026-05-07. Monitoring topics:
+- `igwn.gwalert` — LVK gravitational wave alerts
+- `gcn.notices.icecube.lvk_nu_track_search` — IceCube neutrino tracks
+- `gcn.notices.swift.bat.guano` — Swift BAT GRB
+- `gcn.notices.fermi.gbm.general` — Fermi GBM
+- `gcn.notices.einstein_probe.wxt.alert` — Einstein Probe
+- `gcn.classic.text.LVC_INITIAL` — LVC classic notices
+- `igwn.gwalert` heartbeat
+
+30+ Mock Data Challenge events archived (MS260507u–MS260512x).
+
+---
+
+## Sky Localization (v10)
+
+3-detector sky localization via Rodrigues rotation:
+```
+cos θ = c·Δt / |baseline|
+```
+Three sky rings (H1-L1, H1-V1, L1-V1) intersect at candidate sky position.
+
+Validated results:
+
+| Event | Our Δt(H1-L1) | LIGO published | Status |
+|---|---|---|---|
+| GW150914 | −4.15 ms | −6.9 ms | ✓ correct sign |
+| GW170814 | 3-ring intersection | ~RA 50°, Dec −45° | ✓ correct quadrant |
+| GW170817 | BNS template dominant | ✓ | ✓ |
+
+---
+
+## Publications
+
+- **ESSOAr Preprint:** https://essopenarchive.org (In Moderation)
+- **Zenodo Phase E:** https://doi.org/10.5281/zenodo.20129975
+- **Zenodo Phase A-D:** https://doi.org/10.5281/zenodo.20098932
+- **Original preprint:** https://doi.org/10.5281/zenodo.19553825
+
+---
+
+## Roadmap
+
+| Milestone | Description | Timeline |
+|---|---|---|
+| E8 | Network SNR H1+L1+V1 combined | Q3 2026 |
+| E9 | IR1 live monitoring (real O5 alerts) | Oct-Nov 2026 |
+| E10 | LISA frequency band adaptation | Q1 2027 |
 
 ---
 
@@ -177,29 +232,29 @@ robust statistics approach developed for the Boyajian's Star analysis.
 ```bibtex
 @software{kretski_orac_nt_2026,
   author    = {Kretski, Dimitar},
-  title     = {{ORAC-NT v9: A 2PN Matched Filter Pipeline for Gravitational
-                Wave Detection and 3-Detector Sky Localization}},
+  title     = {{ORAC-NT: Real-Time Gravitational Wave Detection Pipeline}},
   year      = {2026},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.19553825},
-  url       = {https://doi.org/10.5281/zenodo.19553825}
+  doi       = {10.5281/zenodo.20129975},
+  url       = {https://doi.org/10.5281/zenodo.20129975}
 }
 ```
 
 ---
 
-## Related work
+## Related Work
 
-- **Boyajian's Star anomaly detection** (ORAC-NT W-functional on Kepler light curves):
-  https://zenodo.org/records/19536321
-
-- **SynergyFF** — molecular ensemble optimizer for drug discovery (patent pending BG):
-  https://github.com/Kretski
+- **ORAC-QNode** — STM32 hardware vitality controller: https://github.com/Kretski/ORAC-QNode
+- **Boyajian's Star** — W-functional on Kepler light curves: https://zenodo.org/records/19536321
+- **SynergyFF** — molecular ensemble optimizer (patent pending BG): https://github.com/Kretski
 
 ---
 
 ## License
 
-[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — Dimitar Kretski, 2026
+**CC BY-NC 4.0** — Dimitar Kretski, 2026
+
+Non-commercial use: free with attribution.
+Commercial use: contact kretski1@gmail.com
 
 Data: LIGO Open Science Center (GWOSC), CC BY 4.0
